@@ -75,6 +75,28 @@ Dir.chdir(HERE) do
       safe_sh(configure)
       safe_sh("make  2>&1")
       safe_sh("make install 2>&1")
+
+      # for Windows/Cygwin, perform DLLTOOL
+      isWindows = /cygwin/i === RbConfig::CONFIG['host_os']
+      if isWindows
+        # backup *.a lib files
+        Dir.chdir("#{HERE}/lib") do
+          %w[st mt].each do |stmt|
+            %w[a].each do |ext|
+              system("cp -f libzookeeper_#{stmt}.#{ext} libzookeeper_#{stmt}.#{ext}.bak")
+            end
+          end
+        end
+        # create *.a lib generated from dlltool, from 
+        # https://cygwin.com/cygwin-ug-net/dll.html#dll-build (Linking Against DLLs)
+        Dir.chdir("#{HERE}/bin") do
+          %w[st mt].each do |stmt|
+            %w[dll].each do |ext|
+              safe_sh("dlltool --def #{BUNDLE_PATH}/.libs/cygzookeeper_#{stmt}-2.#{ext}.def --dllname cygzookeeper_#{stmt}-2.#{ext} --output-lib #{HERE}/lib/libzookeeper_#{stmt}.a")
+            end
+          end
+        end
+      end
     end
 
     system("rm -rf #{BUNDLE_PATH}") unless ZK_DEBUG or ZK_DEV
@@ -93,7 +115,7 @@ end
 # -lm must come after lzookeeper_st_gem to ensure proper link
 $LIBS << " -lzookeeper_st_gem -lm"
 
-have_func('rb_thread_blocking_region')
+have_func('rb_thread_blocking_region', 'ruby.h')
 have_func('rb_thread_fd_select')
 
 $CFLAGS << ' -Wall' if ZK_DEV
