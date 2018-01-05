@@ -76,23 +76,17 @@ Dir.chdir(HERE) do
       safe_sh("make  2>&1")
       safe_sh("make install 2>&1")
 
-      # for Windows/Cygwin, perform DLLTOOL
+      # for Windows/Cygwin add bin location to PATH
       isWindows = /cygwin/i === RbConfig::CONFIG['host_os']
       if isWindows
-        # backup *.a lib files
-        Dir.chdir("#{HERE}/lib") do
-          %w[st mt].each do |stmt|
-            %w[a].each do |ext|
-              system("cp -f libzookeeper_#{stmt}.#{ext} libzookeeper_#{stmt}.#{ext}.bak")
-            end
-          end
-        end
-        # create *.a lib generated from dlltool, from 
-        # https://cygwin.com/cygwin-ug-net/dll.html#dll-build (Linking Against DLLs)
+        # copy cygzookeepr*.dll to ruby/bin (must be a folder in $PATH)
+        which_gem = `which gem` 
+        ruby_bin_folder = File.dirname(which_gem)
         Dir.chdir("#{HERE}/bin") do
           %w[st mt].each do |stmt|
             %w[dll].each do |ext|
-              safe_sh("dlltool --def #{BUNDLE_PATH}/.libs/cygzookeeper_#{stmt}-2.#{ext}.def --dllname cygzookeeper_#{stmt}-2.#{ext} --output-lib #{HERE}/lib/libzookeeper_#{stmt}.a")
+              # copy to ruby/bin
+              safe_sh("cp cygzookeeper_#{stmt}-2.#{ext} #{ruby_bin_folder}")
             end
           end
         end
@@ -103,17 +97,24 @@ Dir.chdir(HERE) do
   end
 end
 
+win_dll_ext = ""
+# For Windows/Cygwin, use *.dll.a libraries
+is_windows = /cygwin/i === RbConfig::CONFIG['host_os']
+if is_windows
+  win_dll_ext = ".dll"
+end
+
 # Absolutely prevent the linker from picking up any other zookeeper_mt
 Dir.chdir("#{HERE}/lib") do
   %w[st mt].each do |stmt|
     %w[a la].each do |ext|
-      system("cp -f libzookeeper_#{stmt}.#{ext} libzookeeper_#{stmt}_gem.#{ext}")
+      system("cp -f libzookeeper_#{stmt}#{win_dll_ext}.#{ext} libzookeeper_#{stmt}_gem#{win_dll_ext}.#{ext}")
     end
   end
 end
 
 # -lm must come after lzookeeper_st_gem to ensure proper link
-$LIBS << " -lzookeeper_st_gem -lm"
+$LIBS << " -lzookeeper_st_gem#{win_dll_ext} -lm"
 
 have_func('rb_thread_blocking_region', 'ruby.h')
 have_func('rb_thread_fd_select')
